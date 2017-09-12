@@ -41,7 +41,7 @@ namespace SignalProcessingKalman
         private Matrix<double> y_k;
 
         /// <summary>
-        /// The measurements of the system. Y_k
+        /// The current measurements of the system. Y_k
         /// </summary>
         public Matrix<double> Measured
         {
@@ -55,7 +55,7 @@ namespace SignalProcessingKalman
         public Matrix<double> Cov { get; set; }
 
         /// <summary>
-        /// State transition matrix
+        /// State transition matrix. 
         /// </summary>
         public Matrix<double> F { get; set; }
 
@@ -69,7 +69,11 @@ namespace SignalProcessingKalman
         /// </summary>
         public Matrix<double> R { get; set; }
 
-        // Constructor
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="x_location">Initial x location</param>
+        /// <param name="y_location">Initial y location</param>
         public Location2d(double x_location, double y_location)
         {
             // Form initial position in column matrix
@@ -83,6 +87,10 @@ namespace SignalProcessingKalman
             _logger.Info("Initial location " + x0);
         }
 
+        /// <summary>
+        /// Set the covariance matrix as a diagonal matrix
+        /// </summary>
+        /// <param name="value">Value on the diagonal</param>
         public void SetCovarianceDiagonal(double value)
         {
             Cov = M.Diagonal(2, 2, value);
@@ -90,6 +98,11 @@ namespace SignalProcessingKalman
             _logger.Info("Covariance " + Cov);
         }
 
+        /// <summary>
+        /// Set the location with the current measurement of the system
+        /// </summary>
+        /// <param name="x_location">location on x-axis</param>
+        /// <param name="y_location">location on y-axis</param>
         public void SetMeasuredLocation(double x_location, double y_location)
         {
             y_k = Matrix<double>.Build.DenseOfColumnMajor(2, 1, new double[] { x_location, y_location });
@@ -97,16 +110,24 @@ namespace SignalProcessingKalman
             _logger.Info("Measured location " + Measured);
         }
 
-        public void SetSpeed(double velocity, double angle)
+        /// <summary>
+        /// Set the current velocity
+        /// </summary>
+        /// <param name="speed">Value of the speed</param>
+        /// <param name="angle">Speed direction angle</param>
+        public void SetVelocity(double speed, double angle)
         {
-            var x_velocity = velocity * Trig.Cos(angle);
-            var y_velocity = velocity * Trig.Sin(angle);
+            var x_velocity = speed * Trig.Cos(angle);
+            var y_velocity = speed * Trig.Sin(angle);
 
             F = M.DiagonalOfDiagonalArray(new double[] { x_velocity, y_velocity });
 
-            _logger.Info("Current speed " + F);
+            _logger.Info("Current velocity " + F);
         }
 
+        /// <summary>
+        /// Update measurement from the system reading.
+        /// </summary>
         public void UpdateMeasurement()
         {
             var s = Measured.PointwiseDivide(Current).ToColumnWiseArray();            
@@ -130,13 +151,22 @@ namespace SignalProcessingKalman
             set { _location = value; }
         }
 
-        // Constructor
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="initialLocation">Initial location object</param>
         public DiscreteKalman2d(Location2d initialLocation)
         {
             _location = initialLocation ?? throw new ArgumentException("Initial location required");
             dkf = new DiscreteKalmanFilter(initialLocation.Initial, initialLocation.Cov);
         }
 
+        /// <summary>
+        /// Constructor 
+        /// </summary>
+        /// <param name="initial_x">Initial x location</param>
+        /// <param name="initial_y">Initial y location</param>
+        /// <param name="covariance">Initial covariance value</param>
         public DiscreteKalman2d(double initial_x, double initial_y, double covariance)
         {
             _location = new Location2d(initial_x, initial_y);
@@ -144,15 +174,32 @@ namespace SignalProcessingKalman
             dkf = new DiscreteKalmanFilter(_location.Initial, _location.Cov);
         }
 
-        public double[] PredictNextLocation(double velocity, double angle, int steps)
+        /// <summary>
+        /// Use the current Kalman filter and the current velocity to predict the next location  
+        /// </summary>
+        /// <param name="speed">System speed</param>
+        /// <param name="angle">System heading angle</param>
+        /// <param name="timespan">Prediction timespan</param>
+        /// <returns>An array of the 2D coordinate [x, y]</returns>
+        public double[] PredictNextLocation(double speed, double angle, int timespan)
         {
             // Update
             UpdateKalmanEstimate();
 
             // Predict
-            PredictKalman(velocity, angle, steps);
+            PredictKalman(speed, angle, timespan);
 
             return dkf.State.ToColumnWiseArray();
+        }
+
+        /// <summary>
+        /// Set the location to the current measured 
+        /// </summary>
+        /// <param name="x_location">x location</param>
+        /// <param name="y_location">y location</param>
+        public void SetLocation(double x_location, double y_location)
+        {
+            _location.SetMeasuredLocation(x_location, y_location);
         }
 
         /// <summary>
@@ -169,9 +216,15 @@ namespace SignalProcessingKalman
             _location.Cov = dkf.Cov;
         }
 
-        private void PredictKalman(double velocity, double angle, int steps)
+        /// <summary>
+        /// This step is to predict the next location based on the velocity and timespan
+        /// </summary>
+        /// <param name="speed">Current speed</param>
+        /// <param name="angle">Current heading angle</param>
+        /// <param name="timespan">How much future (discrete time units) to predict</param>
+        private void PredictKalman(double speed, double angle, int timespan)
         {
-            _location.SetSpeed(steps*velocity, angle);
+            _location.SetVelocity(timespan*speed, angle);
             dkf.Predict(_location.F);
         }
     }
